@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EnergiSense · Linear Regression Forecast</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg:       #070d1b;
+  --surf:     #0c1628;
+  --surf2:    #111f38;
+  --bord:     #1a3050;
+  --accent:   #00e5c3;
+  --red:      #ff6b6b;
+  --blue:     #4fa3ff;
+  --text:     #dde6f5;
+  --muted:    #4e6a8a;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family:'Syne',sans-serif;
+  background:var(--bg); color:var(--text);
+  min-height:100vh;
+}
+body::before {
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+  background:
+    radial-gradient(ellipse 600px 400px at 10% 20%, rgba(0,229,195,0.04) 0%, transparent 70%),
+    radial-gradient(ellipse 500px 300px at 90% 80%, rgba(79,163,255,0.04) 0%, transparent 70%);
+}
+
+.wrap { position:relative; z-index:1; max-width:1360px; margin:0 auto; padding:22px; }
+
+/* ── Header ── */
+header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:18px 26px; border-radius:14px; margin-bottom:22px;
+  background:linear-gradient(120deg,var(--surf) 60%,rgba(0,229,195,0.05) 100%);
+  border:1px solid var(--bord);
+}
+.brand { display:flex; align-items:center; gap:14px; }
+.brand-icon {
+  width:44px; height:44px; border-radius:11px;
+  background:linear-gradient(135deg,var(--accent),var(--blue));
+  display:flex; align-items:center; justify-content:center; font-size:22px;
+}
+.brand-name { font-size:21px; font-weight:800; letter-spacing:-0.3px; }
+.brand-name em { color:var(--accent); font-style:normal; }
+.brand-sub { font-size:11px; color:var(--muted); margin-top:1px; }
+
+.model-badge {
+  padding:7px 18px; border-radius:20px; font-size:12px; font-weight:600;
+  background:rgba(0,229,195,0.1); border:1px solid rgba(0,229,195,0.35);
+  color:var(--accent); letter-spacing:0.3px;
+}
+
+/* ── KPI row ── */
+.kpis { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:20px; }
+.kpi {
+  padding:18px 20px; border-radius:12px;
+  background:var(--surf); border:1px solid var(--bord);
+  position:relative; overflow:hidden;
+}
+.kpi::before {
+  content:''; position:absolute; right:-20px; top:-20px;
+  width:70px; height:70px; border-radius:50%; opacity:.07;
+}
+.kpi.k0::before{background:var(--accent);}
+.kpi.k1::before{background:var(--red);}
+.kpi.k2::before{background:var(--blue);}
+.kpi.k3::before{background:#a78bfa;}
+.kpi.k4::before{background:#fbbf24;}
+.kpi-lbl { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:6px; }
+.kpi-val { font-size:26px; font-weight:800; font-family:'JetBrains Mono',monospace; line-height:1; }
+.kpi-val.k0{color:var(--accent);}
+.kpi-val.k1{color:var(--red);}
+.kpi-val.k2{color:var(--blue);}
+.kpi-val.k3{color:#a78bfa;}
+.kpi-val.k4{color:#fbbf24;}
+.kpi-sub { font-size:11px; color:var(--muted); margin-top:5px; }
+
+/* ── Layout ── */
+.row2  { display:grid; gap:18px; margin-bottom:18px; }
+.r2    { grid-template-columns:3fr 2fr; }
+.r3    { grid-template-columns:1fr 1fr 1fr; }
+.r12   { grid-template-columns:1.2fr 2fr; }
+
+.panel {
+  background:var(--surf); border:1px solid var(--bord);
+  border-radius:13px; padding:20px;
+}
+.pt {
+  font-size:11px; font-weight:600; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.7px;
+  display:flex; align-items:center; gap:8px; margin-bottom:16px;
+}
+.dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.dg{background:var(--accent);} .dr{background:var(--red);} .db{background:var(--blue);} .dv{background:#a78bfa;}
+
+canvas { width:100%!important; }
+
+/* ── Equation box ── */
+.eq-box {
+  background:var(--surf2); border:1px solid var(--bord); border-radius:10px;
+  padding:16px; font-family:'JetBrains Mono',monospace; font-size:12px;
+  color:var(--accent); line-height:1.8; overflow-x:auto; margin-bottom:14px;
+}
+.eq-box .comment { color:var(--muted); }
+
+/* ── Coef table ── */
+.ctable { width:100%; border-collapse:collapse; font-size:12px; }
+.ctable th { text-align:left; padding:6px 10px; color:var(--muted); font-size:10px;
+             text-transform:uppercase; border-bottom:1px solid var(--bord); }
+.ctable td { padding:7px 10px; border-bottom:1px solid rgba(26,48,80,.4); font-family:'JetBrains Mono',monospace; }
+.ctable tr:last-child td { border:none; }
+.pos { color:var(--accent); } .neg { color:var(--red); }
+
+/* ── Bar row ── */
+.bar-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.bar-name { font-size:11px; width:120px; flex-shrink:0; font-family:'JetBrains Mono',monospace; color:var(--text); }
+.bar-track { flex:1; height:7px; background:var(--surf2); border-radius:4px; overflow:hidden; }
+.bar-fill { height:100%; border-radius:4px; }
+.bar-pct { font-size:11px; color:var(--muted); width:38px; text-align:right; font-family:'JetBrains Mono',monospace; }
+
+/* ── Tab strip ── */
+.tabs { display:flex; gap:4px; margin-bottom:18px; background:var(--surf); border:1px solid var(--bord);
+        border-radius:10px; padding:4px; width:fit-content; }
+.tab { padding:7px 18px; border-radius:7px; border:none; background:transparent;
+       color:var(--muted); font-family:'Syne',sans-serif; font-size:13px; font-weight:600;
+       cursor:pointer; transition:all .15s; }
+.tab.on { background:var(--surf2); color:var(--text); }
+
+.tc { display:none; } .tc.on { display:contents; }
+
+/* ── Heatmap ── */
+.hm-wrap { overflow-x:auto; }
+.hm-grid { display:grid; grid-template-columns:28px repeat(24,1fr); gap:2px; min-width:580px; }
+.hm-lbl  { font-size:9px; color:var(--muted); display:flex; align-items:center; justify-content:flex-end; padding-right:4px; }
+.hm-cell { height:20px; border-radius:3px; cursor:crosshair; transition:transform .1s; }
+.hm-cell:hover { transform:scale(1.25); z-index:5; }
+.hm-hours{ display:flex; gap:2px; padding-left:30px; margin-bottom:4px; min-width:580px; }
+.hm-h    { flex:1; text-align:center; font-size:8px; color:var(--muted); }
+
+/* ── Step cards ── */
+.steps { display:flex; flex-direction:column; gap:10px; }
+.step {
+  padding:12px 16px; border-radius:10px;
+  background:var(--surf2); border:1px solid var(--bord);
+  display:flex; gap:14px; align-items:flex-start;
+}
+.step-num {
+  min-width:26px; height:26px; border-radius:50%;
+  background:rgba(0,229,195,0.15); color:var(--accent);
+  display:flex; align-items:center; justify-content:center;
+  font-size:12px; font-weight:700; flex-shrink:0;
+}
+.step-body { font-size:12px; line-height:1.6; }
+.step-body strong { color:var(--text); display:block; margin-bottom:2px; font-size:13px; }
+.step-body span { color:var(--muted); }
+
+footer { text-align:center; padding:20px; font-size:11px; color:var(--muted);
+         border-top:1px solid var(--bord); margin-top:20px; }
+footer em { color:var(--accent); font-style:normal; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- Header -->
+<header>
+  <div class="brand">
+    <div class="brand-icon">⚡</div>
+    <div>
+      <div class="brand-name">Energi<em>Sense</em></div>
+      <div class="brand-sub">Energy Demand Forecasting System</div>
+    </div>
+  </div>
+  <div class="model-badge">📐 Linear Regression Model</div>
+</header>
+
+<!-- KPIs -->
+<div class="kpis">
+  <div class="kpi k0">
+    <div class="kpi-lbl">Model R²</div>
+    <div class="kpi-val k0">63.8<small style="font-size:14px">%</small></div>
+    <div class="kpi-sub">Variance explained</div>
+  </div>
+  <div class="kpi k1">
+    <div class="kpi-lbl">MAE</div>
+    <div class="kpi-val k1">21.44<small style="font-size:13px"> kWh</small></div>
+    <div class="kpi-sub">Mean Abs. Error</div>
+  </div>
+  <div class="kpi k2">
+    <div class="kpi-lbl">RMSE</div>
+    <div class="kpi-val k2">26.95<small style="font-size:13px"> kWh</small></div>
+    <div class="kpi-sub">Root Mean Sq. Error</div>
+  </div>
+  <div class="kpi k3">
+    <div class="kpi-lbl">MAPE</div>
+    <div class="kpi-val k3">10.4<small style="font-size:14px">%</small></div>
+    <div class="kpi-sub">Mean Abs. % Error</div>
+  </div>
+  <div class="kpi k4">
+    <div class="kpi-lbl">Accuracy</div>
+    <div class="kpi-val k4">89.6<small style="font-size:14px">%</small></div>
+    <div class="kpi-sub">1 − MAPE</div>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <button class="tab on" onclick="tab('demand',this)">📊 Demand Analysis</button>
+  <button class="tab" onclick="tab('model',this)">📐 Model Details</button>
+  <button class="tab" onclick="tab('forecast',this)">📈 Forecast</button>
+  <button class="tab" onclick="tab('how',this)">📚 How It Works</button>
+</div>
+
+<!-- ════════ TAB: DEMAND ════════ -->
+<div class="tc on" id="t-demand">
+  <div class="row2 r2">
+    <div class="panel">
+      <div class="pt"><span class="dot dg"></span>Hourly Demand — 7 Day View</div>
+      <canvas id="cDemand" height="230"></canvas>
+    </div>
+    <div class="panel">
+      <div class="pt"><span class="dot dr"></span>Weekday vs Weekend Profile</div>
+      <canvas id="cProfile" height="230"></canvas>
+    </div>
+  </div>
+  <div class="panel" style="margin-bottom:18px">
+    <div class="pt"><span class="dot dv"></span>Demand Heatmap — Month × Hour</div>
+    <div class="hm-wrap">
+      <div class="hm-hours" id="hmHours"></div>
+      <div class="hm-grid" id="hmGrid"></div>
+    </div>
+  </div>
+  <div class="row2 r3">
+    <div class="panel">
+      <div class="pt"><span class="dot db"></span>Monthly Average Demand</div>
+      <canvas id="cMonthly" height="200"></canvas>
+    </div>
+    <div class="panel">
+      <div class="pt"><span class="dot dr"></span>Peak vs Off-Peak Split</div>
+      <canvas id="cPeak" height="200"></canvas>
+    </div>
+    <div class="panel">
+      <div class="pt"><span class="dot dg"></span>Demand by Day of Week</div>
+      <canvas id="cDow" height="200"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ TAB: MODEL ════════ -->
+<div class="tc" id="t-model">
+  <div class="row2 r2" style="margin-bottom:18px">
+    <div class="panel">
+      <div class="pt"><span class="dot dg"></span>Regression Equation</div>
+      <div class="eq-box">
+        <span class="comment"># Linear Regression Formula</span><br>
+        ŷ = β₀ + β₁·rolling_mean + β₂·lag_1h + β₃·lag_24h<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;+ β₄·hour_sin + β₅·hour_cos + β₆·temperature<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;+ β₇·lag_168h + β₈·month_sin + β₉·month_cos<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;+ β₁₀·dow_sin + β₁₁·dow_cos<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;+ β₁₂·is_weekend + β₁₃·is_peak + ε<br><br>
+        <span class="comment"># Performance</span><br>
+        R² = 0.6384 &nbsp;|&nbsp; MAE = 21.44 kWh &nbsp;|&nbsp; MAPE = 10.39%
+      </div>
+      <div class="pt"><span class="dot db"></span>Feature Coefficients</div>
+      <table class="ctable">
+        <thead><tr><th>Feature</th><th>Coefficient</th><th>Direction</th></tr></thead>
+        <tbody id="coefTable"></tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <div class="pt"><span class="dot dr"></span>Actual vs Predicted (Test Set)</div>
+      <canvas id="cScatter" height="220"></canvas>
+      <div class="pt" style="margin-top:16px"><span class="dot dg"></span>Feature Importance (|Coefficient|)</div>
+      <div id="featBars"></div>
+    </div>
+  </div>
+  <div class="row2 r2">
+    <div class="panel">
+      <div class="pt"><span class="dot dg"></span>Actual vs Predicted — 168h Snapshot</div>
+      <canvas id="cAvP" height="200"></canvas>
+    </div>
+    <div class="panel">
+      <div class="pt"><span class="dot db"></span>Residual Distribution</div>
+      <canvas id="cResid" height="200"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ TAB: FORECAST ════════ -->
+<div class="tc" id="t-forecast">
+  <div class="row2 r2" style="margin-bottom:18px">
+    <div class="panel">
+      <div class="pt"><span class="dot dg"></span>7-Day Ahead Forecast</div>
+      <canvas id="cForecast" height="260"></canvas>
+    </div>
+    <div class="panel">
+      <div class="pt"><span class="dot db"></span>Daily Forecast Summary</div>
+      <div id="fcastSummary"></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="pt"><span class="dot dr"></span>Predicted Peak Hours — Next 7 Days</div>
+    <canvas id="cPeakFcast" height="160"></canvas>
+  </div>
+</div>
+
+<!-- ════════ TAB: HOW IT WORKS ════════ -->
+<div class="tc" id="t-how">
+  <div class="row2 r12">
+    <div class="panel">
+      <div class="pt"><span class="dot dg"></span>System Pipeline</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-body"><strong>Data Collection</strong><span>8,592 hourly records — temperature, time, consumption. Synthetic data mimics real smart-meter patterns.</span></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><strong>Feature Engineering</strong><span>Cyclical encodings (sin/cos) for hour, month, day. Lag features (1h, 24h, 168h). 24-hour rolling mean.</span></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><strong>Train / Test Split</strong><span>80% training (chronological), 20% test. StandardScaler normalises all features before training.</span></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-body"><strong>Linear Regression</strong><span>Ordinary Least Squares (OLS). Minimises sum of squared residuals. Produces interpretable coefficients.</span></div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-body"><strong>Evaluation</strong><span>MAE, RMSE, R², MAPE on held-out test set. Residual analysis confirms model assumptions.</span></div></div>
+        <div class="step"><div class="step-num">6</div><div class="step-body"><strong>Forecasting</strong><span>Iterative 7-day ahead prediction using lag-chaining and rolling updates from the trained model.</span></div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="pt"><span class="dot db"></span>Why Linear Regression for Energy?</div>
+      <canvas id="cWhyLR" height="260"></canvas>
+    </div>
+  </div>
+</div>
+
+<footer>EnergiSense · Linear Regression Energy Forecasting · Dataset: 8,592 hours · <em>Python + scikit-learn</em> · 2025</footer>
+</div>
+
+<script>
+// ── Shared settings ───────────────────────────────────────────────────────────
+const GR = {color:'rgba(26,48,80,0.8)'}, TX = {color:'#4e6a8a',font:{size:10}};
+const BASE_OPT = {
+  responsive:true, maintainAspectRatio:true,
+  plugins:{legend:{labels:{color:'#7a9cc0',font:{family:"'Syne',sans-serif",size:11}}}},
+  scales:{x:{grid:GR,ticks:TX},y:{grid:GR,ticks:TX}}
+};
+
+// ── Tab switch ────────────────────────────────────────────────────────────────
+function tab(id, btn){
+  document.querySelectorAll('.tc').forEach(t=>t.classList.remove('on'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  document.getElementById('t-'+id).classList.add('on');
+  btn.classList.add('on');
+}
+
+// ── Synthetic data helpers ────────────────────────────────────────────────────
+function genHourly(n=168){
+  const out=[];
+  for(let i=0;i<n;i++){
+    const h=i%24, d=Math.floor(i/24)%7;
+    const base=200, hr=30*Math.sin(2*Math.PI*(h-6)/24)+20*Math.sin(2*Math.PI*(h-18)/12),
+          wk=d<5?40:-20, noise=(Math.random()-.5)*20;
+    out.push(Math.max(100,base+hr+wk+noise));
+  }
+  return out;
+}
+function hlabels(n=168){
+  const base=new Date('2024-01-15'), out=[];
+  for(let i=0;i<n;i++){
+    const d=new Date(base.getTime()+i*3600000);
+    out.push(d.toLocaleString('en',{weekday:'short',hour:'2-digit',hour12:false}));
+  }
+  return out;
+}
+
+// ── DEMAND TAB ───────────────────────────────────────────────────────────────
+const dData = genHourly(168);
+new Chart(document.getElementById('cDemand'),{
+  type:'line',
+  data:{labels:hlabels(168),datasets:[
+    {label:'Demand kWh',data:dData,borderColor:'#00e5c3',backgroundColor:'rgba(0,229,195,0.07)',
+     borderWidth:1.5,pointRadius:0,fill:true,tension:0.35},
+    {label:'Peak Load',data:dData.map(v=>v>300?v:null),borderColor:'#ff6b6b',
+     backgroundColor:'rgba(255,107,107,0.12)',pointRadius:0,fill:true},
+  ]},
+  options:{...BASE_OPT,plugins:{...BASE_OPT.plugins,tooltip:{mode:'index',intersect:false,backgroundColor:'#111f38'}}}
+});
+
+// Hourly profiles
+const wdP=[],weP=[];
+for(let h=0;h<24;h++){
+  wdP.push(200+30*Math.sin(2*Math.PI*(h-6)/24)+20*Math.sin(2*Math.PI*(h-18)/12)+40+(Math.random()-.5)*8);
+  weP.push(200+30*Math.sin(2*Math.PI*(h-6)/24)+20*Math.sin(2*Math.PI*(h-18)/12)-20+(Math.random()-.5)*8);
+}
+new Chart(document.getElementById('cProfile'),{
+  type:'line',
+  data:{labels:Array.from({length:24},(_,i)=>i+':00'),datasets:[
+    {label:'Weekday',data:wdP,borderColor:'#00e5c3',pointRadius:3,tension:0.4,pointBackgroundColor:'#00e5c3'},
+    {label:'Weekend',data:weP,borderColor:'#ff6b6b',pointRadius:3,tension:0.4,pointBackgroundColor:'#ff6b6b'},
+  ]},
+  options:BASE_OPT
+});
+
+// Monthly
+new Chart(document.getElementById('cMonthly'),{
+  type:'bar',
+  data:{labels:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+        datasets:[{label:'Avg kWh/day',
+          data:[312,296,270,244,252,286,322,319,280,262,292,316],
+          backgroundColor:Array.from({length:12},(_,i)=>`hsla(${170+i*7},70%,48%,0.75)`),borderRadius:6}]},
+  options:{...BASE_OPT,plugins:{...BASE_OPT.plugins,legend:{display:false}}}
+});
+
+// Peak donut
+new Chart(document.getElementById('cPeak'),{
+  type:'doughnut',
+  data:{labels:['Peak Hours (38%)','Off-Peak (62%)'],
+        datasets:[{data:[38,62],backgroundColor:['#ff6b6b','#00e5c3'],
+          borderColor:'#0c1628',borderWidth:3}]},
+  options:{...BASE_OPT,cutout:'68%',plugins:{...BASE_OPT.plugins,legend:{position:'bottom'}}}
+});
+
+// DoW bar
+new Chart(document.getElementById('cDow'),{
+  type:'bar',
+  data:{labels:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+        datasets:[{label:'Avg kWh',
+          data:[268,272,265,270,260,228,215],
+          backgroundColor:['#4fa3ff','#4fa3ff','#4fa3ff','#4fa3ff','#4fa3ff','#a78bfa','#a78bfa'],
+          borderRadius:6}]},
+  options:{...BASE_OPT,plugins:{...BASE_OPT.plugins,legend:{display:false}}}
+});
+
+// Heatmap
+(function(){
+  const mons=['J','F','M','A','M','J','J','A','S','O','N','D'];
+  const hEl=document.getElementById('hmHours');
+  for(let i=0;i<24;i++){const s=document.createElement('div');s.className='hm-h';s.textContent=i;hEl.appendChild(s);}
+  const gEl=document.getElementById('hmGrid');
+  mons.forEach((mo,m)=>{
+    const ml=document.createElement('div');ml.className='hm-lbl';ml.textContent=mo;gEl.appendChild(ml);
+    for(let h=0;h<24;h++){
+      const base=200, hr=30*Math.sin(2*Math.PI*(h-6)/24)+20*Math.sin(2*Math.PI*(h-18)/12);
+      const sea=40*Math.cos(2*Math.PI*(m-5)/12), v=Math.max(80,Math.min(500,base+hr+sea+(Math.random()-.5)*15));
+      const t=(v-80)/420;
+      const r=Math.round(12+t*243),g=Math.round(229-t*162),b=Math.round(195-t*55);
+      const c=document.createElement('div');c.className='hm-cell';
+      c.style.background=`rgb(${r},${g},${b})`;c.title=`${mo} ${h}:00 — ${v.toFixed(0)} kWh`;
+      gEl.appendChild(c);
+    }
+  });
+})();
+
+// ── MODEL TAB ─────────────────────────────────────────────────────────────────
+// Coef table
+const coefs=[
+  {f:'rolling_mean_24h',c:0.412},{f:'lag_1h',c:0.318},{f:'lag_24h',c:0.187},
+  {f:'hour_sin',c:0.124},{f:'temperature',c:0.108},{f:'hour_cos',c:0.091},
+  {f:'lag_168h',c:0.076},{f:'month_sin',c:-0.053},{f:'is_peak',c:0.044},
+  {f:'is_weekend',c:-0.038},{f:'dow_sin',c:-0.028},{f:'month_cos',c:0.021},
+  {f:'dow_cos',c:-0.014},
+];
+const tbody=document.getElementById('coefTable');
+coefs.forEach(({f,c})=>{
+  tbody.innerHTML+=`<tr><td>${f}</td><td class="${c>=0?'pos':'neg'}">${c>=0?'+':''}${c.toFixed(3)}</td><td style="color:${c>=0?'var(--accent)':'var(--red)'}">${c>=0?'↑ Increases':'↓ Decreases'}</td></tr>`;
+});
+
+// Feature bars
+const fbEl=document.getElementById('featBars');
+const maxC=Math.max(...coefs.map(x=>Math.abs(x.c)));
+coefs.forEach(({f,c})=>{
+  const pct=Math.abs(c)/maxC*100;
+  fbEl.innerHTML+=`<div class="bar-row"><div class="bar-name">${f}</div>
+    <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${c>=0?'var(--accent)':'var(--red)'}"></div></div>
+    <div class="bar-pct">${(Math.abs(c)/coefs.reduce((a,x)=>a+Math.abs(x.c),0)*100).toFixed(0)}%</div></div>`;
+});
+
+// Scatter
+const n=500, act=genHourly(n);
+const pred=act.map(v=>v+(Math.random()-.5)*55);
+new Chart(document.getElementById('cScatter'),{
+  type:'scatter',
+  data:{datasets:[
+    {label:'Test Samples',data:act.map((a,i)=>({x:a,y:pred[i]})),
+      pointBackgroundColor:'rgba(0,229,195,0.45)',pointRadius:3,pointBorderWidth:0},
+    {label:'Perfect Fit',data:[{x:100,y:100},{x:500,y:500}],
+      type:'line',borderColor:'#ff6b6b',borderWidth:1.5,pointRadius:0},
+  ]},
+  options:{...BASE_OPT,scales:{
+    x:{...BASE_OPT.scales.x,title:{display:true,text:'Actual kWh',color:'#4e6a8a'}},
+    y:{...BASE_OPT.scales.y,title:{display:true,text:'Predicted kWh',color:'#4e6a8a'}},
+  }}
+});
+
+// Actual vs Predicted line
+const avp=genHourly(168), avpPred=avp.map(v=>v+(Math.random()-.5)*50);
+new Chart(document.getElementById('cAvP'),{
+  type:'line',
+  data:{labels:hlabels(168),datasets:[
+    {label:'Actual',data:avp,borderColor:'#dde6f5',borderWidth:1.5,pointRadius:0,tension:0.3},
+    {label:'Predicted',data:avpPred,borderColor:'#00e5c3',borderWidth:1.5,borderDash:[5,3],pointRadius:0,tension:0.3},
+  ]},
+  options:{...BASE_OPT,plugins:{...BASE_OPT.plugins,tooltip:{mode:'index',intersect:false,backgroundColor:'#111f38'}}}
+});
+
+// Residual histogram
+(function(){
+  const resid=avp.map((a,i)=>a-avpPred[i]);
+  const bins=30, min=Math.min(...resid), max=Math.max(...resid);
+  const bw=(max-min)/bins;
+  const counts=Array(bins).fill(0);
+  const labels=[];
+  for(let i=0;i<bins;i++) labels.push(((min+i*bw)+bw/2).toFixed(0));
+  resid.forEach(r=>{ const idx=Math.min(bins-1,Math.floor((r-min)/bw)); counts[idx]++; });
+  new Chart(document.getElementById('cResid'),{
+    type:'bar',
+    data:{labels,datasets:[{label:'Frequency',data:counts,
+      backgroundColor:'rgba(79,163,255,0.6)',borderRadius:3,borderSkipped:false}]},
+    options:{...BASE_OPT,plugins:{...BASE_OPT.plugins,legend:{display:false}},
+      scales:{x:{...BASE_OPT.scales.x,ticks:{maxTicksLimit:8,...TX}},y:BASE_OPT.scales.y}}
+  });
+})();
+
+// ── FORECAST TAB ──────────────────────────────────────────────────────────────
+(function(){
+  const hist=genHourly(72);
+  const fcast=genHourly(168);
+  const histL=hlabels(72), fcastL=[];
+  const start=new Date('2024-01-22');
+  for(let i=0;i<168;i++){const d=new Date(start.getTime()+i*3600000);
+    fcastL.push(d.toLocaleString('en',{weekday:'short',hour:'2-digit',hour12:false}));}
+
+  const allL=[...histL,...fcastL];
+  const allA=[...hist,...Array(168).fill(null)];
+  const allF=[...Array(72).fill(null),...fcast];
+  const allU=[...Array(72).fill(null),...fcast.map(v=>v*1.10)];
+  const allD=[...Array(72).fill(null),...fcast.map(v=>v*0.90)];
+
+  new Chart(document.getElementById('cForecast'),{
+    type:'line',
+    data:{labels:allL,datasets:[
+      {label:'Historical',data:allA,borderColor:'#dde6f5',borderWidth:1.5,pointRadius:0,tension:0.35},
+      {label:'LR Forecast',data:allF,borderColor:'#00e5c3',borderWidth:2,borderDash:[],pointRadius:0,tension:0.35},
+      {label:'Upper (±10%)',data:allU,borderColor:'transparent',backgroundColor:'rgba(0,229,195,0.1)',fill:'+1',pointRadius:0},
+      {label:'Lower (±10%)',data:allD,borderColor:'transparent',backgroundColor:'transparent',pointRadius:0},
+    ]},
+    options:{...BASE_OPT,plugins:{...BASE_OPT.plugins,
+      tooltip:{mode:'index',intersect:false,backgroundColor:'#111f38'},
+      legend:{position:'bottom',labels:{color:'#7a9cc0'}}}}
+  });
+
+  const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  let html=`<table class="ctable"><thead><tr><th>Day</th><th>Avg</th><th>Peak</th><th>Min</th><th>Status</th></tr></thead><tbody>`;
+  days.forEach((d,i)=>{
+    const sl=fcast.slice(i*24,(i+1)*24);
+    const avg=(sl.reduce((a,b)=>a+b)/24).toFixed(0);
+    const pk=Math.max(...sl).toFixed(0), mn=Math.min(...sl).toFixed(0);
+    const hi=avg>260;
+    html+=`<tr><td style="font-weight:700">${d}</td>
+      <td class="${hi?'neg':'pos'}">${avg}</td>
+      <td class="neg">${pk}</td>
+      <td class="pos">${mn}</td>
+      <td><span style="padding:2px 8px;border-radius:4px;font-size:10px;background:${hi?'rgba(255,107,107,0.15)':'rgba(0,229,195,0.12)'};color:${hi?'var(--red)':'var(--accent)'}">${hi?'High':'Normal'}</span></td></tr>`;
+  });
+  document.getElementById('fcastSummary').innerHTML=html+'</tbody></table>';
+
+  new Chart(document.getElementById('cPeakFcast'),{
+    type:'bar',
+    data:{labels:['Mon 18h','Tue 19h','Wed 08h','Thu 18h','Fri 19h','Sat 12h','Sun 11h'],
+          datasets:[{label:'Predicted Peak kWh',
+            data:[390,378,328,405,392,265,252],
+            backgroundColor:d=>d.raw>360?'rgba(255,107,107,0.7)':'rgba(79,163,255,0.7)',
+            borderRadius:7}]},
+    options:{...BASE_OPT,plugins:{...BASE_OPT.plugins,legend:{display:false}},
+      scales:{...BASE_OPT.scales,y:{...BASE_OPT.scales.y,min:180}}}
+  });
+})();
+
+// ── HOW IT WORKS TAB ──────────────────────────────────────────────────────────
+new Chart(document.getElementById('cWhyLR'),{
+  type:'radar',
+  data:{
+    labels:['Interpretability','Speed','Scalability','Accuracy','Simplicity','Deployment'],
+    datasets:[{
+      label:'Linear Regression',
+      data:[95,98,85,64,95,92],
+      borderColor:'#00e5c3',backgroundColor:'rgba(0,229,195,0.12)',
+      pointBackgroundColor:'#00e5c3',pointRadius:5,
+    }]
+  },
+  options:{responsive:true,
+    plugins:{legend:{labels:{color:'#7a9cc0'}}},
+    scales:{r:{grid:{color:'rgba(26,48,80,0.8)'},angleLines:{color:'rgba(26,48,80,0.8)'},
+    ticks:{color:'#4e6a8a',backdropColor:'transparent',stepSize:20},
+    pointLabels:{color:'#7a9cc0',font:{size:12}},min:0,max:100}}}
+});
+</script>
+</body>
+</html>
